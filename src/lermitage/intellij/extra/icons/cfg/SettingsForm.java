@@ -3,7 +3,12 @@ package lermitage.intellij.extra.icons.cfg;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.IconLoader;
+import com.intellij.ui.AnActionButton;
+import com.intellij.ui.AnActionButtonRunnable;
+import com.intellij.ui.ToolbarDecorator;
 import com.intellij.ui.table.JBTable;
+import com.intellij.uiDesigner.core.GridConstraints;
+import com.intellij.uiDesigner.core.GridLayoutManager;
 import lermitage.intellij.extra.icons.Model;
 import lermitage.intellij.extra.icons.ModelType;
 import lermitage.intellij.extra.icons.cfg.settings.SettingsProjectService;
@@ -11,18 +16,20 @@ import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import java.awt.*;
 import java.awt.event.ItemEvent;
 import java.util.ArrayList;
 import java.util.List;
 
 public class SettingsForm implements Configurable {
 
+    private final JBTable table = new JBTable();
     private JPanel pane;
     private JLabel title;
-    private JBTable table;
     private JButton buttonEnableAll;
     private JButton buttonDisableAll;
     private JCheckBox overrideSettingsCheckbox;
+    private JPanel tablePanel;
 
     private SettingsTableModel settingsTableModel;
     private Project project;
@@ -86,6 +93,11 @@ public class SettingsForm implements Configurable {
         title.setText("Select extra icons to activate, then hit OK or Apply button:");
         buttonEnableAll.setText("Enable all");
         buttonDisableAll.setText("Disable all");
+        table.setShowHorizontalLines(false);
+        table.setShowVerticalLines(false);
+        table.setFocusable(false);
+        table.setEnabled(true);
+        table.setRowSelectionAllowed(true);
         initCheckbox();
         loadTable();
     }
@@ -143,11 +155,14 @@ public class SettingsForm implements Configurable {
             return typeComparison;
         });
         List<String> disabledModelIds = SettingsService.getInstance(project).getDisabledModelIds();
-        allRegisteredModels.forEach(m -> settingsTableModel.addRow(new Object[]{
-            IconLoader.getIcon(m.getIcon()),
-            !disabledModelIds.contains(m.getId()),
-            m.getDescription(),
-            m.getId()})
+        allRegisteredModels.forEach(m -> {
+            settingsTableModel.addRow(new Object[]{
+                IconLoader.getIcon(m.getIcon()),
+                !disabledModelIds.contains(m.getId()),
+                m.getDescription(),
+                m.getId()
+            });
+            }
         );
         table.setModel(settingsTableModel);
         table.setRowHeight(28);
@@ -158,6 +173,21 @@ public class SettingsForm implements Configurable {
         table.getColumnModel().getColumn(SettingsTableModel.ICON_LABEL_ROW_NUMBER).sizeWidthToFit();
         table.getColumnModel().removeColumn(table.getColumnModel().getColumn(SettingsTableModel.ICON_ID_ROW_NUMBER)); // set invisible but keep data
         settingsTableModel.addTableModelListener(e -> modified = true);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         modified = false;
+        ToolbarDecorator decorator = ToolbarDecorator.createDecorator(table).setEditAction(anActionButton -> {
+            int selectedRow = table.getSelectedRow();
+            ModelEditor editor = new ModelEditor();
+            editor.setData(
+                SettingsService.getAllRegisteredModels()
+                    .stream()
+                    .filter(it -> it.getId() == settingsTableModel.getValueAt(selectedRow, SettingsTableModel.ICON_ID_ROW_NUMBER))
+                    .findFirst()
+                    .get()
+            );
+            boolean okClicked = editor.showAndGet();
+            System.out.println("OK was clicked: " + okClicked);
+        }).setButtonComparator("Edit").disableUpDownActions();
+        tablePanel.add(decorator.createPanel(), BorderLayout.CENTER);
     }
 }
