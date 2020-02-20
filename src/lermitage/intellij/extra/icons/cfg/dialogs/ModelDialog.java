@@ -1,11 +1,16 @@
 package lermitage.intellij.extra.icons.cfg.dialogs;
 
+import com.intellij.ide.IconProvider;
 import com.intellij.openapi.fileChooser.FileChooser;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.ui.ValidationInfo;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiManager;
 import com.intellij.ui.CheckBoxList;
 import com.intellij.ui.ListUtil;
 import com.intellij.ui.ToolbarDecorator;
@@ -157,18 +162,17 @@ public class ModelDialog extends DialogWrapper {
                 conditionsCheckboxList.updateItem(selectedCondition, newCondition, newCondition.asReadableString(FIELD_SEPARATOR));
                 newCondition.setEnabled(isEnabled);
             }
-        }).setRemoveAction(anActionButton -> {
-            ListUtil.removeSelectedItems(conditionsCheckboxList);
-        }).setButtonComparator("Add", "Edit", "Remove").createPanel();
+        }).setRemoveAction(anActionButton -> ListUtil.removeSelectedItems(conditionsCheckboxList))
+            .setButtonComparator("Add", "Edit", "Remove").createPanel();
     }
 
     /**
      * Opens a file chooser dialog and loads the icon.
      */
     private CustomIconLoader.ImageWrapper loadCustomIcon() {
+        Project project = settingsForm.getProject() != null ? settingsForm.getProject() : ProjectManager.getInstance().getDefaultProject();
         VirtualFile[] virtualFiles = FileChooser.chooseFiles(
-            new FileChooserDescriptor(true, false, false, false, false, false)
-                .withFileFilter(file -> extensions.contains(file.getExtension())),
+            new IconFileChooserDescriptor(project).withFileFilter(file -> extensions.contains(file.getExtension())),
             settingsForm.getProject(),
             null);
         if (virtualFiles.length > 0) {
@@ -198,5 +202,39 @@ public class ModelDialog extends DialogWrapper {
             return new ValidationInfo("Please add a condition to your model!", toolbarPanel);
         }
         return super.doValidate();
+    }
+
+    private static class IconFileChooserDescriptor extends FileChooserDescriptor {
+
+        private final Project project;
+        private final BaseIconProvider baseIconProvider;
+
+        public IconFileChooserDescriptor(Project project) {
+            super(true, false, false, false, false, false);
+            this.project = project;
+            this.baseIconProvider = ((BaseIconProvider) Arrays.stream(IconProvider.EXTENSION_POINT_NAME.getExtensions())
+                .filter(it -> it instanceof BaseIconProvider)
+                .findFirst()
+                .get());
+        }
+
+        @Override
+        public Icon getIcon(VirtualFile file) {
+            PsiFile psiFile = PsiManager.getInstance(project).findFile(file);
+            if (psiFile == null) {
+                return super.getIcon(file);
+            }
+            Icon icon;
+            try {
+                icon = IconUtil.createImageIcon(CustomIconLoader.loadFromVirtualFile(file).getImage());
+            }
+            catch (IllegalArgumentException ex) {
+                icon = null;
+            }
+            if (icon == null && (icon = baseIconProvider.getIcon(psiFile, 0)) == null) {
+                return super.getIcon(file);
+            }
+            return icon;
+        }
     }
 }
